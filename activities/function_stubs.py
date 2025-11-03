@@ -1,5 +1,6 @@
-import asyncio, random
+import asyncio, random, json
 from typing import Dict, Any
+from db.session import get_db_pool
 
 async def flaky_call() -> None:
     """Either raise an error or sleep long enough to trigger an activity timeout."""
@@ -13,7 +14,19 @@ async def flaky_call() -> None:
 
 async def order_received(order_id: str) -> Dict[str, Any]:
     await flaky_call()
-    # TODO: Implement DB write: insert new order record
+    
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+
+        await conn.execute("""
+            INSERT INTO orders (id, state, address_json, created_at, updated_at) 
+            VALUES ($1, $2, $3, NOW(), NOW())
+            ON CONFLICT (id) DO NOTHING
+        """,
+        order_id,
+        "RECEIVED",
+        None
+        )
     return {"order_id": order_id, "items": [{"sku": "ABC", "qty": 1}]}
 
 async def order_validated(order: Dict[str, Any]) -> bool:
