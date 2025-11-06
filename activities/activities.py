@@ -1,5 +1,7 @@
 from temporalio import activity
+from temporalio.common import RetryPolicy
 from typing import Any, Dict
+from datetime import timedelta
 
 
 from function_stubs import (
@@ -11,9 +13,19 @@ from function_stubs import (
     carrier_dispatched as _carrier_dispatched,
 )
 
-@activity.defn
-async def order_received(order_id: str) -> Dict[str, Any]:
-    return await _order_received(order_id)
+retry_policy = RetryPolicy(
+    initial_interval=timedelta(seconds=1),
+    maximum_interval=timedelta(seconds=5),
+    backoff_coefficient=2.0,
+    maximum_attempts=10
+)
+
+@activity.defn(
+    start_to_close_timeout=timedelta(seconds=30),
+    retry_policy=retry_policy
+)
+async def order_received(order: Dict[str, Any]) -> Dict[str, Any]:
+    return await _order_received(order)
 
 @activity.defn
 async def order_validated(order: Dict[str, Any]) -> bool:
