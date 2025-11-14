@@ -13,11 +13,30 @@ async def init_db_pool():
     if _pool is None:
         # Convert SQLAlchemy URL to asyncpg format
         db_url = settings.database_url.replace("postgresql+asyncpg://", "postgresql://")
+        
+        # Try to create the orders database if it doesn't exist
+        try:
+            # Connect to default postgres database to create orders db
+            default_db_url = db_url.rsplit('/', 1)[0] + '/postgres'
+            conn = await asyncpg.connect(default_db_url)
+            try:
+                await conn.execute('CREATE DATABASE orders')
+                print("Created 'orders' database")
+            except asyncpg.DuplicateDatabaseError:
+                pass  # Database already exists
+            finally:
+                await conn.close()
+        except Exception as e:
+            print(f"Note: Could not create database (may already exist): {e}")
+        
         _pool = await asyncpg.create_pool(
             db_url,
-            min_size=5,
-            max_size=20,
-            command_timeout=60
+            min_size=10,
+            max_size=30,
+            command_timeout=5,
+            statement_cache_size=100,
+            max_cached_statement_lifetime=300,
+            max_cacheable_statement_size=1024 * 15
         )
     return _pool
 

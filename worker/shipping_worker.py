@@ -1,9 +1,14 @@
 import asyncio
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from temporalio.client import Client
 from temporalio.worker import Worker
 from config import settings
 from workflows.shipping_workflow import ShippingWorkflow
-from  import (
+from activities.activities import (
     package_prepared,
     carrier_dispatched,
     order_shipped,
@@ -13,9 +18,9 @@ async def main():
     client = await Client.connect(settings.temporal_address) 
     worker = Worker(
         client,
-        task_queue=settings.order_tq,
+        task_queue=settings.shipping_tq,
         workflows=[ShippingWorkflow],  
-        activities=[package_prepared, carrier_dispatched, order_shipped],  # activities logic here
+        activities=[package_prepared, carrier_dispatched, order_shipped],
     )
     print("Shipping Worker is starting...")
     await worker.run()

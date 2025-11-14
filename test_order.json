@@ -1,0 +1,16 @@
+{
+  "payment_id": "pay-456",
+  "items": [
+    {
+      "name": "Widget",
+      "price": 29.99,
+      "quantity": 2
+    }
+  ],
+  "address": {
+    "street": "123 Main St",
+    "city": "NYC",
+    "zip": "10001"
+  }
+}
+

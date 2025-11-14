@@ -5,16 +5,18 @@ services:
     image: temporalio/auto-setup:1.24.0
     container_name: temporal
     environment:
-      - DB=postgresql
+      - DB=postgres12
       - DB_PORT=5432
-      - POSTGRES_USER=admin
-      - POSTGRES_PWD=admin
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
       - POSTGRES_SEEDS=db
-      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development.yaml
+      - SKIP_DEFAULT_NAMESPACE_CREATION=false
+      - SKIP_DB_CREATE=false
     ports:
       - "7233:7233"   
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   temporal-ui:
     image: temporalio/ui:2.31.2
@@ -31,18 +33,61 @@ services:
     image: postgres:15
     container_name: temporal-db
     environment:
-      - POSTGRES_USER=admin
-      - POSTGRES_PASSWORD=admin
-      - POSTGRES_DB=orders
+      - POSTGRES_USER=temporal
+      - POSTGRES_PASSWORD=temporal
     ports:
       - "5432:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U temporal -d orders"]
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
       interval: 5s
       timeout: 3s
       retries: 10
+
+  order-worker:
+    build: .
+    container_name: order-worker
+    command: python worker/order_worker.py
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - DATABASE_URL=postgresql+asyncpg://temporal:temporal@db:5432/orders
+    depends_on:
+      temporal:
+        condition: service_started
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  shipping-worker:
+    build: .
+    container_name: shipping-worker
+    command: python worker/shipping_worker.py
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - DATABASE_URL=postgresql+asyncpg://temporal:temporal@db:5432/orders
+    depends_on:
+      temporal:
+        condition: service_started
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api:
+    build: .
+    container_name: order-api
+    command: python -m uvicorn api:app --host 0.0.0.0 --port 8000
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - DATABASE_URL=postgresql+asyncpg://temporal:temporal@db:5432/orders
+    ports:
+      - "8000:8000"
+    depends_on:
+      temporal:
+        condition: service_started
+      db:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   db_data:

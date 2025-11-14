@@ -1,4 +1,9 @@
 import asyncio
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from temporalio.client import Client
 from temporalio.worker import Worker
 from config import settings
@@ -7,6 +12,8 @@ from activities.activities import (
     order_received,
     order_validated,
     payment_charged,
+    order_shipped,
+    update_order_address,
 )
 from db.session import init_db_pool, init_schema
 
@@ -22,7 +29,7 @@ async def main():
         client,
         task_queue=settings.order_tq,
         workflows=[OrderWorkflow],  # workflows.order_workflow logic here
-        activities=[order_received, order_validated, payment_charged],  # activities logic here
+        activities=[order_received, order_validated, payment_charged, order_shipped, update_order_address],
     )
     print("Order Worker is starting...")
     await worker.run()

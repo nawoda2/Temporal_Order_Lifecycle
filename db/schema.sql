@@ -23,5 +23,8 @@ CREATE TABLE IF NOT EXISTS events (
     timestamp TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_events_order_id on events(order_id);
-CREATE INDEX IF NOT EXISTS idx_events_timestamp on events(timestamp);
+CREATE INDEX IF NOT EXISTS idx_orders_state ON orders(state);
+CREATE INDEX IF NOT EXISTS idx_payments_order_id ON payments(order_id);
+CREATE INDEX IF NOT EXISTS idx_events_order_id ON events(order_id);
+CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
+CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);

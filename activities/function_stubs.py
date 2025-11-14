@@ -84,7 +84,7 @@ async def order_validated(order: Dict[str, Any]) -> bool:
             logger.error(f"Order {order_id} not found")
             raise ValueError(f"Order {order_id} not found")
 
-        if existing_order['state'] == "VALIDATED":
+        if existing_order['state'] == "ORDER_VALIDATED":
             logger.info(f"Order {order_id} already validated")
             return True
         await conn.execute("""
@@ -305,3 +305,43 @@ async def carrier_dispatched(order: Dict[str, Any]) -> str:
         logger.info(f"Order {order_id} successfully dispatched")
 
     return "CARRIER_DISPATCHED"
+
+async def update_order_address(order_id: str, address: dict) -> None:
+    await flaky_call()
+    
+    logger.info(f"Updating address for order {order_id}")
+    
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        existing_order = await conn.fetchrow(
+            "SELECT id, address_json FROM orders WHERE id = $1",
+            order_id
+        )
+        
+        if not existing_order:
+            logger.error(f"Order {order_id} not found")
+            raise ValueError(f"Order {order_id} not found")
+        
+        old_address = json.loads(existing_order['address_json']) if existing_order['address_json'] else None
+        
+        await conn.execute("""
+            UPDATE orders SET address_json = $1, updated_at = NOW() WHERE id = $2
+        """,
+        json.dumps(address),
+        order_id
+        )
+        
+        await conn.execute("""
+            INSERT INTO events (id, order_id, type, payload_json, timestamp)
+            VALUES ($1, $2, $3, $4, NOW())
+        """,
+        str(uuid.uuid4()),
+        order_id,
+        "ADDRESS_UPDATED",
+        json.dumps({
+            "old_address": old_address,
+            "new_address": address
+        })
+        )
+    
+    logger.info(f"Address updated for order {order_id}")
