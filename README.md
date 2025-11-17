@@ -184,97 +184,6 @@ curl -X POST http://localhost:8000/orders/order-123/signals/cancel
 curl http://localhost:8000/orders/order-123/status
 ```
 
-### Database Inspection
-
-Connect to PostgreSQL:
-```bash
-docker exec -it temporal-db psql -U temporal -d orders
-```
-
-#### Query Orders
-```sql
--- View all orders with their current state
-SELECT id, state, created_at, updated_at 
-FROM orders 
-ORDER BY created_at DESC;
-
--- View order details including items and address
-SELECT 
-    id, 
-    state, 
-    items_json, 
-    address_json,
-    created_at 
-FROM orders 
-WHERE id = 'order-123';
-
--- Count orders by state
-SELECT state, COUNT(*) 
-FROM orders 
-GROUP BY state;
-```
-
-#### Query Payments
-```sql
--- View all payments
-SELECT payment_id, order_id, status, amount, created_at 
-FROM payments 
-ORDER BY created_at DESC;
-
--- Check payment for specific order
-SELECT * 
-FROM payments 
-WHERE order_id = 'order-123';
-
--- Find duplicate payment attempts (should be 0 due to idempotency)
-SELECT payment_id, COUNT(*) 
-FROM payments 
-GROUP BY payment_id 
-HAVING COUNT(*) > 1;
-```
-
-#### Query Events (Audit Trail)
-```sql
--- View all events for an order (chronological)
-SELECT type, payload_json, timestamp 
-FROM events 
-WHERE order_id = 'order-123' 
-ORDER BY timestamp;
-
--- View all events by type
-SELECT type, COUNT(*) 
-FROM events 
-GROUP BY type 
-ORDER BY COUNT(*) DESC;
-
--- Find address update events
-SELECT order_id, payload_json, timestamp 
-FROM events 
-WHERE type = 'ADDRESS_UPDATED' 
-ORDER BY timestamp DESC;
-
--- Recent activity (last 10 events)
-SELECT order_id, type, timestamp 
-FROM events 
-ORDER BY timestamp DESC 
-LIMIT 10;
-```
-
-#### Performance Analysis
-```sql
--- Check index usage
-SELECT schemaname, tablename, indexname, idx_scan 
-FROM pg_stat_user_indexes 
-WHERE schemaname = 'public';
-
--- Table sizes
-SELECT 
-    tablename, 
-    pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size
-FROM pg_tables 
-WHERE schemaname = 'public';
-```
-
 ## Testing
 
 Run a complete workflow test:
@@ -286,8 +195,8 @@ python test_workflow.py
 ## Key Features
 
 ### Retry Logic
-- All activities retry up to 10 times with exponential backoff
-- 30-second timeout per attempt to handle flaky_call() failures
+- All activities retry up to 1000 times 
+- 2-second timeout per attempt to handle flaky_call() failures
 
 ### Idempotency
 - Payment uses unique payment_id to prevent double charges
@@ -411,12 +320,14 @@ All side effects are idempotent:
 - State updates: Update only if not already in target state
 - Events: UUID-based IDs prevent duplicates
 
-## Time Constraint
+## Performance
 
-Workflow completes in ~15 seconds with retries:
-- Each activity: 30s timeout, typically 1-5s with retries
-- Manual approval: Auto-approved in test (300s timeout in prod)
-- Total: Well under 15 second requirement
+Workflow timing with retry logic:
+- **Activity timeout**: 2s per attempt
+- **Retry policy**: Up to 1000 attempts, 5-200ms delays between retries
+- **Manual approval**: 300s timeout (auto-approved in test)
+- **Total time**: ~18-22 seconds with `flaky_call()` causing intentional failures
+- Activities succeed eventually due to aggressive retry policy (33% success rate per attempt)
 
 ## Stop Services
 
@@ -427,18 +338,3 @@ docker-compose down
 # Stop and remove volumes (clean slate)
 docker-compose down -v
 ```
-
-## Troubleshooting
-
-**Workers not starting**: Check logs with `docker-compose logs order-worker`
-
-**DB connection errors**: Check logs with `docker-compose logs db`
-
-**Workflow stuck in AWAITING_APPROVAL**: Send approve signal via API
-
-**API not responding**: Check logs with `docker-compose logs api`
-
-**Payment not idempotent**: Check payment_id is unique per order
-
-**Activities timing out**: Normal! flaky_call() causes intentional failures
-
